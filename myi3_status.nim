@@ -2,10 +2,10 @@ import json
 import std/strformat
 import std/strutils
 import std/[times, os]
-import sequtils
 import math
 import std/tables
 import osproc
+import strscans
 
 var DEFAULT_PROCPATH = "/proc"
 
@@ -49,17 +49,19 @@ var lastTotal = 0
 proc getCpuUsage(): int =
   let fd = open("/proc/stat", fmRead)
   defer: close(fd)
-  let line = fd.readLine()          # e.g. "cpu  1223 34 875 12345 67 8 9"
+  let line = fd.readLine()   # e.g. "cpu  1223 34 875 12345 67 8 9"
 
-  # Split by whitespace and skip the first token ("cpu")
-  let parts = line.splitWhitespace()[1..^1]
-  if parts.len < 7 or not line.startsWith("cpu "):
+  if not line.startsWith("cpu "):
     return 0
 
-  let values = parts.mapIt(parseInt(it))
-  let idle = values[3]                # 4th field is 'idle'
-  let total = values.sum()
+  var
+    user, nice, system, idle, iowait, irq, softirq, steal, guest, guestNice: int
 
+  # Parse up to 10 fields, compatible with various kernel versions
+  discard scanf(line, "cpu$s$i$s$i$s$i$s$i$s$i$s$i$s$i$s$i$s$i$s$i",
+                user, nice, system, idle, iowait, irq, softirq, steal, guest, guestNice)
+
+  let total = user + nice + system + idle + iowait + irq + softirq + steal
   let idleDelta = idle - lastIdle
   let totalDelta = total - lastTotal
   lastIdle = idle
@@ -73,19 +75,19 @@ proc getCpuUsage(): int =
 proc getMemUsage(): int =
   var meminfo = initTable[string, int]()
   for line in lines("/proc/meminfo"):
+    var
+      key: string
+      val: int
     # Example line: "MemTotal:       16301556 kB"
-    let parts = line.split(':', maxsplit=1)
-    if parts.len == 2:
-      let key = parts[0].strip()
-      # extract numeric part
-      let valStr = parts[1].splitWhitespace()[0]
-      if valStr.len > 0:
-        meminfo[key] = parseInt(valStr)
+    if scanf(line, "$w:$s$i", key, val):
+      meminfo[key] = val
 
-  let total = meminfo.getOrDefault("MemTotal")
-  let free = meminfo.getOrDefault("MemFree") +
+  let
+    total = meminfo.getOrDefault("MemTotal")
+    free = meminfo.getOrDefault("MemFree") +
              meminfo.getOrDefault("Buffers") +
              meminfo.getOrDefault("Cached")
+
   if total == 0:
     return 0
   return int((total - free) * 100 div total)
@@ -100,12 +102,10 @@ proc getBatteryInfo(devpath: string, useEnergyFullDesign: bool): string =
 
     try:
       for line in lines(devpath / "uevent"):
+        var key, val: string
         # Example: "POWER_SUPPLY_ENERGY_NOW=123456789"
-        if line.startsWith("POWER_SUPPLY_"):
-          let parts = line.split('=', maxsplit=1)
-          if parts.len == 2:
-            let key = parts[0].replace("POWER_SUPPLY_", "").toLowerAscii()
-            ueventData[key] = parts[1]
+        if scanf(line, "POWER_SUPPLY_$w=$*", key, val):
+          ueventData[key.toLowerAscii()] = val
 
       template f(k: string): string = ueventData.getOrDefault(k)
 
@@ -147,7 +147,7 @@ proc getBatteryInfo(devpath: string, useEnergyFullDesign: bool): string =
 
 proc get_status() =
   var
-    used_width = module_count*18*16 - 16*8 # module_width - workspace_width
+    used_width = module_count*12*16 - 16*8 # module_width - workspace_width
     min_width = getWidth() - used_width 
     dev = "CMB0"
     devpath = "/sys/class/power_supply/" & dev
