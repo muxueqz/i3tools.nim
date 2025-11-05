@@ -2,7 +2,6 @@ import json
 import std/strformat
 import std/strutils
 import std/[times, os]
-import re
 import sequtils
 import math
 import std/tables
@@ -14,6 +13,7 @@ var head = """{"version":1,"click_events":true,"stop_signal":0,"cont_signal":0}
 ["""
 echo(head)
 os.sleep(1*1000)
+const updateFile = "/tmp/update_display"
 
 type
   Rect = object
@@ -41,7 +41,7 @@ proc getWidth(): int =
       return output.rect.width
   return outputs[0].rect.width
 
-var module_count = 3.0
+var module_count = 3
 
 var lastIdle = 0
 var lastTotal = 0
@@ -49,97 +49,116 @@ var lastTotal = 0
 proc getCpuUsage(): int =
   let fd = open("/proc/stat", fmRead)
   defer: close(fd)
-  var line = fd.readLine()
-  var matches = newSeq[string](7)
-  let pattern = re"(?m)^cpu +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d+) +(\d+)"
-  if line.find(pattern, matches) >= 0:
-    let idle = parseInt(matches[3])
-    let total = matches[0..6].mapIt(parseInt(it)).sum
-    let idleDelta = idle - lastIdle
-    let totalDelta = total - lastTotal
-    lastIdle = idle
-    lastTotal = total
-    return int((1 - idleDelta.float / totalDelta.float) * 100)
-  else:
+  let line = fd.readLine()          # e.g. "cpu  1223 34 875 12345 67 8 9"
+
+  # Split by whitespace and skip the first token ("cpu")
+  let parts = line.splitWhitespace()[1..^1]
+  if parts.len < 7 or not line.startsWith("cpu "):
     return 0
 
+  let values = parts.mapIt(parseInt(it))
+  let idle = values[3]                # 4th field is 'idle'
+  let total = values.sum()
+
+  let idleDelta = idle - lastIdle
+  let totalDelta = total - lastTotal
+  lastIdle = idle
+  lastTotal = total
+
+  if totalDelta == 0:
+    return 0
+
+  return int((1 - idleDelta.float / totalDelta.float) * 100)
+
 proc getMemUsage(): int =
-  var meminfo: Table[string, int]
+  var meminfo = initTable[string, int]()
   for line in lines("/proc/meminfo"):
-    var matches: array[2, string]
-    if line.find(re"^(\w+):\s+(\d+)\s+\w+$", matches) >= 0:
-      let key = matches[0]
-      let val = parseInt(matches[1])
-      meminfo[key] = val
-  let total = meminfo["MemTotal"]
-  let free = meminfo["MemFree"] + meminfo["Buffers"] + meminfo["Cached"]
-  return int((total - free) / total * 100)
+    # Example line: "MemTotal:       16301556 kB"
+    let parts = line.split(':', maxsplit=1)
+    if parts.len == 2:
+      let key = parts[0].strip()
+      # extract numeric part
+      let valStr = parts[1].splitWhitespace()[0]
+      if valStr.len > 0:
+        meminfo[key] = parseInt(valStr)
+
+  let total = meminfo.getOrDefault("MemTotal")
+  let free = meminfo.getOrDefault("MemFree") +
+             meminfo.getOrDefault("Buffers") +
+             meminfo.getOrDefault("Cached")
+  if total == 0:
+    return 0
+  return int((total - free) * 100 div total)
 
 proc getBatteryInfo(devpath: string, useEnergyFullDesign: bool): string =
   proc getBatteryInfoReal(devpath: string, useEnergyFullDesign: bool): string =
     var
       ueventData = initTable[string, string]()
       energyFull, energyNow, powerNow: float
-      matches: array[2, string]
+      flag = ""
+      remTime = 0.0
 
     try:
       for line in lines(devpath / "uevent"):
-        if line.match(re"POWER_SUPPLY_([^-]*)=(.*)", matches):
-          let key = matches[0].toLowerAscii()
-          let value = matches[1]
-          ueventData[key] = value
+        # Example: "POWER_SUPPLY_ENERGY_NOW=123456789"
+        if line.startsWith("POWER_SUPPLY_"):
+          let parts = line.split('=', maxsplit=1)
+          if parts.len == 2:
+            let key = parts[0].replace("POWER_SUPPLY_", "").toLowerAscii()
+            ueventData[key] = parts[1]
 
-      energyFull = parseFloat(ueventData.getOrDefault("energy_full"))
-      energyNow = parseFloat(ueventData.getOrDefault("energy_now"))
-      powerNow = parseFloat(ueventData.getOrDefault("power_now"))
+      template f(k: string): string = ueventData.getOrDefault(k)
 
-      if ueventData.getOrDefault("charge_full").match(re"\d+"):
-        let voltageNow = parseFloat(ueventData.getOrDefault("voltage_now"))
-        energyFull = parseFloat(ueventData.getOrDefault("charge_full")) *
-            voltageNow / 1_000_000
-        energyNow = parseFloat(ueventData.getOrDefault("charge_now")) *
-            voltageNow / 1_000_000
-        if ueventData.getOrDefault("current_now").len > 0:
-          powerNow = parseFloat(ueventData.getOrDefault("current_now")) *
-              voltageNow / 1_000_000
+      if f("energy_full") != "":
+        energyFull = parseFloat(f("energy_full"))
+      if f("energy_now") != "":
+        energyNow = parseFloat(f("energy_now"))
+      if f("power_now") != "":
+        powerNow = parseFloat(f("power_now"))
 
-      let status = ueventData.getOrDefault("status")
+      # Handle charge-based batteries
+      if f("charge_full") != "":
+        let voltageNow = parseFloat(f("voltage_now"))
+        energyFull = parseFloat(f("charge_full")) * voltageNow / 1_000_000
+        energyNow = parseFloat(f("charge_now")) * voltageNow / 1_000_000
+        if f("current_now") != "":
+          powerNow = parseFloat(f("current_now")) * voltageNow / 1_000_000
+
+      let status = f("status")
       var energyFullDesign = energyFull
-      if useEnergyFullDesign:
-        energyFullDesign = parseFloat(ueventData.getOrDefault("energy_full_design"))
+      if useEnergyFullDesign and f("energy_full_design") != "":
+        energyFullDesign = parseFloat(f("energy_full_design"))
 
       let capacity = min(int(energyNow / energyFullDesign * 100 + 0.5), 100)
-      var consumption, remTime: float
-      var flag: string
 
       if powerNow != 0:
-        consumption = powerNow / 1_000_000
-        flag = "↑"
         if status == "Charging":
           remTime = (energyFull - energyNow) / powerNow
-        elif status == "Discharging" or status == "Not charging":
+          flag = "↑"
+        elif status in ["Discharging", "Not charging"]:
           remTime = energyNow / powerNow
           flag = "↓"
 
       return &"{flag} {capacity}%:{remTime.int}H"
     except:
       return "battery: unknown"
-  try:
-    result = getBatteryInfoReal(devpath, useEnergyFullDesign)
-  except:
-    result = "battery: unknown"
+
+  return getBatteryInfoReal(devpath, useEnergyFullDesign)
 
 proc get_status() =
   var
-    width = getWidth().toFloat
-    min_width = (width * 0.664).toInt
+    used_width = module_count*18*16 - 16*8 # module_width - workspace_width
+    min_width = getWidth() - used_width 
     dev = "CMB0"
     devpath = "/sys/class/power_supply/" & dev
     status_array: seq[string]
     count = 5
-  for i in 0..module_count.toInt:
+  for i in 0..module_count:
     status_array.add("")
   while true:
+    if fileExists(updateFile):
+      removeFile(updateFile)
+      min_width = getWidth() - used_width 
     var
       item_num = 0
       full_text = times.now().format("yyyy-MM-dd ddd HH:mm:ss")
