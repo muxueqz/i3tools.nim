@@ -23,7 +23,6 @@ This toolkit provides fast, scriptable commands to select windows, switch worksp
 
 * [Nim compiler](https://nim-lang.org/install.html) (≥ 1.6 recommended)
 * [i3](https://i3wm.org/) **or** [Sway](https://swaywm.org/)
-* `i3-msg` or `swaymsg` available in your PATH
 
 ### Build
 
@@ -78,7 +77,6 @@ If no command is given, the tool exits with a non-zero status.
 ---------------
 
 ✅ Works with both **i3** and **Sway** window managers.  
-The tool automatically detects and uses either `i3-msg` or `swaymsg` depending on your environment.
 
 ---
 
