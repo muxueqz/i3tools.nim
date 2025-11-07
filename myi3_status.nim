@@ -4,8 +4,8 @@ import std/strutils
 import std/[times, os]
 import math
 import std/tables
-import osproc
 import strscans
+import i3ipc
 
 var DEFAULT_PROCPATH = "/proc"
 
@@ -14,36 +14,17 @@ const
   head = """{"version":1,"click_events":true,"stop_signal":0,"cont_signal":0}
 ["""
 
-type
-  Rect = object
-    x, y, width, height: int
-
-  Output = object
-    name: string
-    active: bool
-    primary: bool
-    rect: Rect
-
 proc getWidth(): int =
-  let (output, status) = execCmdEx("i3-msg -t get_outputs")
-  if status != 0:
-    return 0
-
-  var outputs: seq[Output]
-  try:
-    outputs = to(parseJson(output), seq[Output])
-  except JsonParsingError:
-    return 0
-
+  let outputs = to(ipc_query(get_outputs), seq[Output])
   for output in outputs:
     if output.primary:
       return output.rect.width
   return outputs[0].rect.width
 
-var module_count = 3
-
-var lastIdle = 0
-var lastTotal = 0
+var
+  module_count = 3
+  lastIdle = 0
+  lastTotal = 0
 
 proc getCpuUsage(): int =
   let fd = open("/proc/stat", fmRead)
