@@ -9,11 +9,10 @@ import strscans
 
 var DEFAULT_PROCPATH = "/proc"
 
-var head = """{"version":1,"click_events":true,"stop_signal":0,"cont_signal":0}
+const
+  updateFile = "/tmp/update_display"
+  head = """{"version":1,"click_events":true,"stop_signal":0,"cont_signal":0}
 ["""
-echo(head)
-os.sleep(1*1000)
-const updateFile = "/tmp/update_display"
 
 type
   Rect = object
@@ -145,7 +144,9 @@ proc getBatteryInfo(devpath: string, useEnergyFullDesign: bool): string =
 
   return getBatteryInfoReal(devpath, useEnergyFullDesign)
 
-proc get_status() =
+proc get_status*() =
+  echo(head)
+  os.sleep(1*1000)
   var
     used_width = module_count*12*16 - 16*8 # module_width - workspace_width
     min_width = getWidth() - used_width 
@@ -182,4 +183,5 @@ proc get_status() =
     os.sleep(1*1000)
     inc count
 
-get_status()
+when isMainModule:
+  get_status()
