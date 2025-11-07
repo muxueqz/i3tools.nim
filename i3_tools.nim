@@ -8,6 +8,7 @@ import streams
 import std/[sequtils]
 import std/[options]
 
+import myi3_status
 
 const
   magic = ['i', '3', '-', 'i', 'p', 'c'] ## prefix for msgs to/from server
@@ -214,5 +215,7 @@ when isMainModule:
     select_window(params)
   of "switch-workspace":
     switch_workspace(params)
+  of "i3status":
+    myi3_status.get_status()
   else:
     discard
