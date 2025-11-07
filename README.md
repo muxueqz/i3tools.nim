@@ -51,7 +51,8 @@ i3tools <command> [options...]
 
 | Command | Description |
 | --- | --- |
-| `select-window` | Select or focus a window interactively. |
+| `window` | Select or focus a window interactively. |
+| `windowcd` | Shows a list of the windows on the current desktop and allows switching between them. |
 | `switch-workspace` | Switch to the specified workspace. |
 | `i3status` | Generate custom status output for i3/Sway bars. |
 
@@ -59,7 +60,7 @@ i3tools <command> [options...]
 
 ```
 # Select a window
-i3tools select-window
+i3tools window
 
 # Switch to workspace 2
 i3tools switch-workspace 2
@@ -85,8 +86,8 @@ You can easily integrate `i3tools` into your **Sway** or **i3** configuration to
 set $i3tools [i3tools.nim]/i3tools
 
 # Window selection
-bindsym $mod+f exec --no-startup-id $i3tools select-window current_workspace
-bindsym $mod+Shift+f exec --no-startup-id $i3tools select-window
+bindsym $mod+f exec --no-startup-id $i3tools windowcd
+bindsym $mod+Shift+f exec --no-startup-id $i3tools window
 
 # Workspace switching
 bindsym $mod+1 exec --no-startup-id $i3tools switch-workspace $ws1
@@ -110,8 +111,34 @@ bar {
 ### Notes
 
 * Replace `[i3tools.nim]/i3tools` with the **actual path** to your compiled binary (e.g. `/usr/local/bin/i3tools` or `~/bin/i3tools`).
-* The `current_workspace` argument limits selection to windows in the active workspace.
-* The `i3tools i3status` command can be extended to show system info, weather, or custom scripts.
+* The `windowcd` argument limits selection to windows in the active workspace.
+* The `i3tools i3status` command can be extended to show system info
+
+---
+
+### Choosing a Menu Launcher
+
+By default, `i3tools` uses **fuzzel** as the launcher command.  
+You can change this behavior by setting the `DMENU_CMD` environment variable.
+
+#### Default (using fuzzel)
+
+```
+
+DMENU_CMD="fuzzel --dmenu --index -w 80 --counter --prompt \"Window > \"")
+
+```
+
+#### Example (using rofi)
+
+If you prefer **rofi**, you can use:
+
+```
+DMENU_CMD='rofi -dmenu -format i' ./i3tools window
+
+```
+
+This allows `i3tools` to integrate seamlessly with your preferred application launcher.
 ---
 
 🧠 Compatibility

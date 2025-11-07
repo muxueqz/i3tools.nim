@@ -62,7 +62,7 @@ proc extract_windows*(workspace: Node): seq[Node] =
         c.workspace = workspace.id.some()
         stack.add(c)
 
-proc get_windows(only_workspace: bool = false): seq[Node] =
+proc get_windows(current_workspace: bool = false): seq[Node] =
   let data = ipc_query(get_tree).to(TreeData)
 
   var workspace_windows = initTable[int, seq[Node]]()
@@ -72,17 +72,13 @@ proc get_windows(only_workspace: bool = false): seq[Node] =
       for workspace in output.nodes:
         if workspace.`type` == "workspace":
           workspace_windows[workspace.id] = workspace.extract_windows
-  if only_workspace:
+  if current_workspace:
     return workspace_windows[focused_workspace]
   return workspace_windows.values.toSeq.concat
 
 
-proc select_window(argv: seq[string]) =
-  var only_workspace = false
-  if argv.len > 1 and argv[1] == "current_workspace":
-    only_workspace = true
-
-  let r = get_windows(only_workspace)
+proc select_window(current_workspace: bool = false) =
+  let r = get_windows(current_workspace)
   var dmenu_str = ""
   for n, i in r:
     var icon = i.app_id.get
@@ -91,16 +87,18 @@ proc select_window(argv: seq[string]) =
     icon = app_id_mapping.getOrDefault(icon, icon)
     dmenu_str.add icon[0 ..< icon.len.min(18)] & "\t" & i.name      & "\0icon\x1f" & icon & "\n"
 
-  let cmd = "fuzzel --dmenu --index -w 80 --counter --prompt \"Window > \""
-  let (output, exitCode) = execCmdEx(cmd, input = dmenu_str)
+  let cmd = getEnv("DMENU_CMD",
+    "fuzzel --dmenu --index -w 80 --counter --prompt \"Window > \"")
+  let (output, exitCode) = execCmdEx(cmd, input = dmenu_str, options = {})
   var selected = output.strip
-  if exitCode > 10 and exitCode < 20:
-    selected = $(exitCode - 10)
+  if "fuzzel " in cmd:
+    if exitCode > 10 and exitCode < 20:
+      selected = $(exitCode - 10)
   if selected != "":
-    let idx = parseInt(selected)
-    let selected_window = r[idx]
-    let window_id = selected_window.id
-    discard execCmd("swaymsg [con_id=" & $window_id & "] focus")
+    let
+      idx = parseInt(selected)
+      win_id= r[idx].id
+    discard ipc_query(command, "[con_id=" & $win_id & "] focus")
 
 when isMainModule:
   let params = commandLineParams()
@@ -108,8 +106,10 @@ when isMainModule:
     quit(-1)
   let func_name = params[0]
   case func_name
-  of "select-window":
-    select_window(params)
+  of "window":
+    select_window(false)
+  of "windowcd":
+    select_window(true)
   of "switch-workspace":
     switch_workspace(params)
   of "i3status":
