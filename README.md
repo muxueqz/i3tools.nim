@@ -73,6 +73,47 @@ If no command is given, the tool exits with a non-zero status.
 
 ---
 
+🪄 Integrating with Sway (or i3)
+-------------------------------
+
+You can easily integrate `i3tools` into your **Sway** or **i3** configuration to enhance workflow and customize your bar.
+
+### Example Configuration
+
+```
+# Define the path to the tool
+set $i3tools [i3tools.nim]/i3tools
+
+# Window selection
+bindsym $mod+f exec --no-startup-id $i3tools select-window current_workspace
+bindsym $mod+Shift+f exec --no-startup-id $i3tools select-window
+
+# Workspace switching
+bindsym $mod+1 exec --no-startup-id $i3tools switch-workspace $ws1
+bindsym $mod+2 exec --no-startup-id $i3tools switch-workspace $ws2
+bindsym $mod+3 exec --no-startup-id $i3tools switch-workspace $ws3
+bindsym $mod+4 exec --no-startup-id $i3tools switch-workspace $ws4
+bindsym $mod+5 exec --no-startup-id $i3tools switch-workspace $ws5
+bindsym $mod+6 exec --no-startup-id $i3tools switch-workspace $ws6
+bindsym $mod+7 exec --no-startup-id $i3tools switch-workspace $ws7
+bindsym $mod+8 exec --no-startup-id $i3tools switch-workspace $ws8
+
+# Custom status bar integration
+bar {
+    status_command $i3tools i3status
+    position top
+    tray_output *
+}
+
+```
+
+### Notes
+
+* Replace `[i3tools.nim]/i3tools` with the **actual path** to your compiled binary (e.g. `/usr/local/bin/i3tools` or `~/bin/i3tools`).
+* The `current_workspace` argument limits selection to windows in the active workspace.
+* The `i3tools i3status` command can be extended to show system info, weather, or custom scripts.
+---
+
 🧠 Compatibility
 ---------------
 
