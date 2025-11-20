@@ -82,7 +82,6 @@ proc select_window(current_workspace: bool = false) =
   var dmenu_str = ""
   for n, i in r:
     var icon = "shellscript"
-    echo i
     if i.app_id.isNone() and i.window_properties.isSome():
       icon = i.window_properties.get.class
     else:
