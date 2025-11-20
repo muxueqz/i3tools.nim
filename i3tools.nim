@@ -81,9 +81,12 @@ proc select_window(current_workspace: bool = false) =
   let r = get_windows(current_workspace)
   var dmenu_str = ""
   for n, i in r:
-    var icon = i.app_id.get
-# if icon == "":
-      # icon = i.getOrDefault("window_properties", %*{}).getOrDefault("class", %*"").getStr
+    var icon = "shellscript"
+    echo i
+    if i.app_id.isNone() and i.window_properties.isSome():
+      icon = i.window_properties.get.class
+    else:
+      icon = i.app_id.get
     icon = app_id_mapping.getOrDefault(icon, icon)
     dmenu_str.add icon[0 ..< icon.len.min(18)] & "\t" & i.name      & "\0icon\x1f" & icon & "\n"
 

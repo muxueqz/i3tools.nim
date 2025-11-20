@@ -83,10 +83,20 @@ type
     nodes*: seq[Node]
     floating_nodes*: seq[Node]
     workspace*: Option[int]
+    window_properties*: Option[Window_properties]
 
   TreeData* = object
     nodes*: seq[Node]
 
+# "window_properties": {
+#   "class": "st-256color",
+#   "instance": "st-256color",
+#   "title": "st",
+#   "transient_for": null
+# }
+  Window_properties* = object
+    # instance*: string
+    instance*, `class`*, title*: string
 type
   WindowInfo* = object
     id*: int
